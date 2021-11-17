@@ -2,16 +2,9 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, intern};
 use web_sys::{HtmlElement, Element, Node, Window, History, Document, Text, Comment, DomTokenList, CssStyleSheet, CssStyleDeclaration, HtmlStyleElement, CssStyleRule, EventTarget};
 
-
-#[wasm_bindgen(inline_js = "
-    export function set_property(obj, name, value) { obj[name] = value; }
-")]
-extern "C" {
-    // TODO move this into wasm-bindgen or gloo or something
-    // TODO maybe use Object for obj ?
-    pub(crate) fn set_property(obj: &JsValue, name: &str, value: &JsValue);
+pub(crate) fn set_property(obj: &JsValue, name: &str, value: &JsValue) {
+    js_sys::Reflect::set(obj, &JsValue::from_str(name), value).unwrap_throw();
 }
-
 
 thread_local! {
     static WINDOW: Window = web_sys::window().unwrap_throw();
