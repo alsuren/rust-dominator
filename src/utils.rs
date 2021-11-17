@@ -1,63 +1,48 @@
+use std::borrow::Cow;
 use std::mem::ManuallyDrop;
 
-use wasm_bindgen::{JsCast, UnwrapThrowExt, intern};
-use wasm_bindgen::closure::Closure;
+use wasm_bindgen::{UnwrapThrowExt, intern};
 use discard::Discard;
 use web_sys::{EventTarget, Event};
 
-use crate::bindings;
 use crate::dom::EventOptions;
 use crate::traits::StaticEvent;
 
 
-// TODO should use gloo::events, but it doesn't support interning or Discard
 pub(crate) struct EventListener {
-    elem: EventTarget,
-    name: &'static str,
-    capture: bool,
-    closure: Option<Closure<dyn FnMut(&Event)>>,
+    listener: Option<gloo_events::EventListener>,
 }
 
 // TODO should these inline ?
 impl EventListener {
     #[inline]
     pub(crate) fn new<F>(elem: EventTarget, name: &'static str, options: &EventOptions, callback: F) -> Self where F: FnMut(&Event) + 'static {
-        let closure = Closure::wrap(Box::new(callback) as Box<dyn FnMut(&Event)>);
         let name: &'static str = intern(name);
-
-        let capture = !options.bubbles;
-
-        bindings::add_event(&elem, name, capture, !options.preventable, closure.as_ref().unchecked_ref());
-
-        Self { elem, name, capture, closure: Some(closure) }
+        let listener = gloo_events::EventListener::new_with_options(&elem, Cow::Borrowed(name), options.into(), callback);
+        Self { listener: Some(listener) }
     }
 
     #[inline]
     pub(crate) fn once<F>(elem: EventTarget, name: &'static str, callback: F) -> Self where F: FnOnce(&Event) + 'static {
-        let closure = Closure::once(callback);
         let name: &'static str = intern(name);
-
-        bindings::add_event_once(&elem, name, closure.as_ref().unchecked_ref());
-
-        Self { elem, name, capture: true, closure: Some(closure) }
+        let listener = gloo_events::EventListener::once(&elem, Cow::Borrowed(name), callback);
+        Self { listener: Some(listener) }
     }
 }
 
+// Our default drop impl stays registered to the event, but gloo_events::EventListener
+// requires you to call ::forget() to stay registered.
 impl Drop for EventListener {
     #[inline]
     fn drop(&mut self) {
-        if let Some(closure) = self.closure.take() {
-            // TODO can this be made more optimal ?
-            closure.forget();
-        }
+        self.listener.take().map(|l| l.forget());
     }
 }
 
 impl Discard for EventListener {
     #[inline]
     fn discard(mut self) {
-        let closure = self.closure.take().unwrap_throw();
-        bindings::remove_event(&self.elem, &self.name, self.capture, closure.as_ref().unchecked_ref());
+        let _ = self.listener.take().unwrap_throw();
     }
 }
 

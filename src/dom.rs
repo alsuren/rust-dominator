@@ -430,6 +430,17 @@ impl EventOptions {
     }
 }
 
+impl From<&EventOptions> for gloo_events::EventListenerOptions {
+    fn from(e: &EventOptions) -> Self {
+        let phase = match e.bubbles {
+            true => gloo_events::EventListenerPhase::Bubble,
+            false => gloo_events::EventListenerPhase::Capture,
+        };
+        let passive = !e.preventable;
+        Self { phase , passive }
+    }
+}
+
 impl Default for EventOptions {
     fn default() -> Self {
         Self {
